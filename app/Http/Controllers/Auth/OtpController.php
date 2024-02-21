@@ -5,11 +5,12 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Notifications\OtpNotification;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class OtpController extends Controller
 {
-    public function store(Request $request)
+    public function store(Request $request): JsonResponse
     {
         // validate phone number
         $request->validate([
@@ -19,12 +20,18 @@ class OtpController extends Controller
         $phone = $request->phone;
         $user = User::where('phone', $phone)->first();
         if ($user) {
-            // if exists then send otp to phone number
+            // check the existing otp expired or not
+            $otp = $user->otp()->where('expires_at', '>=', now())->first();
+
+            if ($otp) {
+                return response()->json(['message' => 'OTP already sent'], 422);
+            }
+            // if exists and otp expired then send otp to phone number
             $code = rand(1000, 9999);
             // save otp in otp model
             $otp = $user->otp()->create([
                 'code' => $code,
-                'expires_at' => now()->addDays(5)
+                'expires_at' => now()->addMinutes(5)
             ]);
             // send otp to phone number
             $user->notify(new OtpNotification($otp));
@@ -34,11 +41,9 @@ class OtpController extends Controller
             // if not exists then return error message
             return response()->json(['message' => 'Phone number not exists'], 404);
         }
-        // if exists then send otp to phone number
-        // if not exists then return error message
     }
 
-    public function login(Request $request)
+    public function login(Request $request): JsonResponse
     {
         // login using otp
         // validate phone number and otp
